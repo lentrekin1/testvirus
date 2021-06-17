@@ -1,13 +1,30 @@
+#todo use https://antiscan.me
+
+
 import socket, pickle, time
+from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
 
 home = ('127.0.0.1', 5000)
-
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+encryptor = PKCS1_OAEP.new(RSA.import_key(open('pub.pem').read()))
+#todo decide how to give pub key to client.py
 
-client.connect(home)
+def send(msg):
+    msg = encryptor.encrypt(pickle.dumps(msg))
+    client.send(msg)
 
-client.send(pickle.dumps('clientmsg'))
+def run():
+    client.connect(home)
+    print(f'client connected to {home[0]}:{home[1]}')
 
-print(pickle.loads(client.recv(1024)))
+    send('msg from client')
 
-time.sleep(5)
+    print(f'msg recv from {home[0]}:{home[1]}: {pickle.loads(client.recv(1024))}')
+
+    time.sleep(20)
+    print('client closed')
+    return
+
+if __name__ == '__main__':
+    run()
