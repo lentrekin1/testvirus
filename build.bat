@@ -1,0 +1,1 @@
+python -m nuitka --onefile --windows-onefile-tempdir client.py
