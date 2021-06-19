@@ -9,7 +9,6 @@ home = ('192.168.0.224', 5000)
 conn = None
 #encryptor = PKCS1_OAEP.new(RSA.import_key(open('pub.pem').read()))
 conn_open = False
-#todo decide how to give pub key to client.py - maybe  --include-plugin-files=PATTERN or --include-data-file=DATA_FILES in build cmd
 
 def get_size(b, s="B"):
     f = 1024
@@ -35,7 +34,6 @@ def run():
             print(f'Sent {socket.gethostname()} to home as nickname')
             server_alive = True
         except:
-            traceback.print_exc()
             print('Could not connect to server')
             server_alive = False
             time.sleep(5)
