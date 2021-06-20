@@ -1,0 +1,2 @@
+Nuitka==0.6.15.3
+pycryptodome==3.10.1
