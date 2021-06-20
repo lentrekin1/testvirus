@@ -85,7 +85,7 @@ class User():
         self.conn[0].send(pickle.dumps(msg))
         self.hist.append({'from': 'server', 'msg': msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
 
-    def get_response(self):
+    def get_response(self): #todo timeout exits immediately
         # get next msg from user
         self.start = time.time()
         print(standard_text + 'Waiting for client response...')
@@ -94,7 +94,7 @@ class User():
             pass
         if not self.alive:
             return 'Clent disconnected'
-        elif time.time() - self.start < 30:
+        elif time.time() - self.start > 30:
             return 'Client response timed out'
         else:
             return [m for m in self.hist if m['from'] == 'client'][-1]['msg']
@@ -125,7 +125,7 @@ def clean(msg):
         return pickle.loads(msg)
     except ValueError:
         return -1
-#todo bots saved only in memory, maybe save connection details to file?
+
 def get_instructions(): #todo add file down/uploading from bot, get bot's file structure, add more options
     opt = get_choice(['Select a bot'], 'Main Menu')
     if opt == 0:
@@ -155,7 +155,7 @@ def get_instructions(): #todo add file down/uploading from bot, get bot's file s
                         show(response)
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
-                elif opt == 2:
+                elif opt == 3:
                     for msg in user.hist:
                         print(Fore.MAGENTA + f'{msg["timestamp"]} | {msg["from"]}: {msg["msg"]}')
         else:
@@ -195,7 +195,7 @@ def run():
             if not os.path.isfile(user_file):
                 with open(user_file, 'w') as f:
                     json.dump({}, f)
-            with open(user_file, 'r') as f: #todo view bot session logs not working
+            with open(user_file, 'r') as f:
                 read_users = json.load(f)
             read_users[conn[1][0]] = name
             with open(user_file, 'w') as f:
