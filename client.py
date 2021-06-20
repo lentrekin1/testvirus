@@ -5,11 +5,11 @@ import traceback
 #from Crypto.PublicKey import RSA
 #from Crypto.Cipher import PKCS1_OAEP
 
-home = ('192.168.0.224', 5000)
+home = ('192.168.0.224', 5000) #192.168.0.224
 conn = None
 #encryptor = PKCS1_OAEP.new(RSA.import_key(open('pub.pem').read()))
 conn_open = False
-
+#maybe use https://stackoverflow.com/questions/26160900/is-there-a-way-to-add-a-task-to-the-windows-task-scheduler-via-python-3 to "add to startup" or run cmds?
 def get_size(b, s="B"):
     f = 1024
     for u in ["", "K", "M", "G", "T", "P"]:
