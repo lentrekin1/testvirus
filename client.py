@@ -32,12 +32,12 @@ def run():
 
         try:
             conn.connect(home)
-            print(f'Client connected to {home[0]}:{home[1]}')
+            #print(f'Client connected to {home[0]}:{home[1]}')
             conn.sendall(pickle.dumps({'name': socket.gethostname()}))
-            print(f'Sent {socket.gethostname()} to home as nickname')
+            #print(f'Sent {socket.gethostname()} to home as nickname')
             server_alive = True
         except:
-            print('Could not connect to server')
+            #print('Could not connect to server')
             server_alive = False
             time.sleep(5)
 
@@ -47,7 +47,7 @@ def run():
                 cmd = pickle.loads(conn.recv(1024))
 
                 if cmd['type'] != 'keepalive':
-                    print(f'Command recieved from {home[0]}:{home[1]}: {cmd}')
+                    #(f'Command recieved from {home[0]}:{home[1]}: {cmd}')
                     response = 1, 'Invalid command'
 
                 if cmd['type'] == 'getinfo':
@@ -134,10 +134,10 @@ def run():
                 if response:
                     send(response)
             except:
-                traceback.print_exc()
+                #traceback.print_exc()
                 server_alive = False
                 conn = None
-                print('Invalid msg from server, assuming server down')
+                #print('Invalid msg from server, assuming server down')
 
 if __name__ == '__main__':
     run()
