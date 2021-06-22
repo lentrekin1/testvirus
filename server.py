@@ -126,7 +126,6 @@ class User():
                 self.msg = clean(self.msg)
                 self.expected_size = self.msg['incoming']
         except:
-            traceback.print_exc()
             self.hist.append({'from': 'server', 'msg': 'client disconnected', 'timestamp': datetime.now().strftime('%m-%d-%Y %I:%M:%S%p')})
             self.alive = False
             return -2
@@ -180,7 +179,7 @@ def download(user):
     else:
         print(warning_text + 'Error: ' + response['msg'])
 
-def get_instructions(): #todo add more options
+def get_instructions():
     opt = get_choice(['Select a bot'], 'Main Menu')
     if opt == 0:
         if len(users) > 0:
@@ -300,7 +299,6 @@ def run():
                 json.dump(read_users, f)
             threading.Thread(target=user.manage, args=()).start()
         except:
-            traceback.print_exc()
             print(warning_text + f'Discarding connection because invalid name recieved from {conn[1][0]}:{conn[1][1]}')
 
 
