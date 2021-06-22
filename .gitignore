@@ -2,6 +2,8 @@ priv.pem
 pub.pem
 client.exe
 users.json
+dir.txt
+/client.*
 
 ### Python template
 # Byte-compiled / optimized / DLL files
