@@ -47,7 +47,7 @@ def get_user(id):
     for user in users:
         if user.id == id:
             return user
-
+#todo add option to uninstall from client
 class User():
     def __init__(self, conn=None, name=None, ip=None):
         if conn:
@@ -162,7 +162,7 @@ def upload(user):
             user.send({'type': 'upload', 'size': len(pickle.dumps(msg))})
             user.send(msg)
         response = user.get_response()
-        if response['exit'] == 0:  # todo maybe move this part to the show() function
+        if response['exit'] == 0:
             print(response['msg'])
         else:
             print(warning_text + 'Error: ' + response['msg'])
