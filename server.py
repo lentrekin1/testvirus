@@ -48,6 +48,7 @@ def get_user(id):
         if user.id == id:
             return user
 #todo add option to uninstall from client
+#todo handle cmds like "python" in shell
 class User():
     def __init__(self, conn=None, name=None, ip=None):
         if conn:

